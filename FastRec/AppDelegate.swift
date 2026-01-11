@@ -1,12 +1,14 @@
 import Cocoa
 import SwiftUI
 
+@MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var recorderWindow: RecorderWindow?
-    private var recorderState = RecorderState()
+    private var recorderState: RecorderState?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        recorderState = RecorderState()
         setupMenuBar()
         setupRecorderWindow()
 
@@ -27,6 +29,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setupRecorderWindow() {
+        guard let recorderState = recorderState else { return }
         recorderWindow = RecorderWindow(recorderState: recorderState)
     }
 
