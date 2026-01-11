@@ -23,9 +23,35 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let image = NSImage(systemSymbolName: "record.circle", accessibilityDescription: "FastRec")
             image?.isTemplate = true
             button.image = image
-            button.action = #selector(toggleRecorderWindow)
+            button.action = #selector(statusItemClicked)
             button.target = self
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
+    }
+
+    @objc private func statusItemClicked() {
+        guard let event = NSApp.currentEvent else { return }
+
+        if event.type == .rightMouseUp {
+            showMenu()
+        } else {
+            toggleRecorderWindow()
+        }
+    }
+
+    private func showMenu() {
+        let menu = NSMenu()
+        menu.addItem(NSMenuItem(title: "Show FastRec", action: #selector(toggleRecorderWindow), keyEquivalent: ""))
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(NSMenuItem(title: "Quit FastRec", action: #selector(quitApp), keyEquivalent: "q"))
+
+        statusItem?.menu = menu
+        statusItem?.button?.performClick(nil)
+        statusItem?.menu = nil  // Remove menu so left-click works again
+    }
+
+    @objc private func quitApp() {
+        NSApp.terminate(nil)
     }
 
     private func setupRecorderWindow() {

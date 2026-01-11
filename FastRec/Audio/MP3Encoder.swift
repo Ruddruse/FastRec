@@ -2,130 +2,140 @@ import Foundation
 import AVFoundation
 
 class MP3Encoder {
-    enum EncoderError: Error {
+    enum EncoderError: Error, LocalizedError {
         case sourceFileNotFound
         case failedToReadSource
         case failedToCreateExportSession
         case exportFailed(String)
         case unsupportedFormat
+
+        var errorDescription: String? {
+            switch self {
+            case .sourceFileNotFound:
+                return "Source file not found"
+            case .failedToReadSource:
+                return "Failed to read source file"
+            case .failedToCreateExportSession:
+                return "Failed to create export session"
+            case .exportFailed(let message):
+                return "Export failed: \(message)"
+            case .unsupportedFormat:
+                return "Unsupported format"
+            }
+        }
     }
 
-    /// Encode audio file to MP3 format
-    /// Uses AVAssetWriter with AAC as fallback since native MP3 encoding
-    /// requires additional setup. For true MP3, we use AVAssetExportSession
-    /// with a preset that produces compatible output.
+    /// Encode audio file to M4A format (AAC)
+    /// Note: macOS doesn't natively support MP3 encoding, so we use M4A/AAC
+    /// which is widely compatible and higher quality
     func encode(from sourceURL: URL, to destinationURL: URL) async throws {
         // Check source file exists
         guard FileManager.default.fileExists(atPath: sourceURL.path) else {
+            print("MP3Encoder: Source file not found at \(sourceURL.path)")
             throw EncoderError.sourceFileNotFound
         }
+
+        // Get file size for debugging
+        let attrs = try? FileManager.default.attributesOfItem(atPath: sourceURL.path)
+        let fileSize = attrs?[.size] as? Int64 ?? 0
+        print("MP3Encoder: Source file size: \(fileSize) bytes")
+
+        // Determine output format based on extension
+        let outputExtension = destinationURL.pathExtension.lowercased()
+
+        if outputExtension == "wav" {
+            // Just copy the WAV file
+            try copyFile(from: sourceURL, to: destinationURL)
+        } else {
+            // Export to M4A (AAC)
+            let actualDestination: URL
+            if outputExtension == "mp3" || outputExtension == "m4a" {
+                // Change extension to m4a for proper format
+                actualDestination = destinationURL.deletingPathExtension().appendingPathExtension("m4a")
+            } else {
+                actualDestination = destinationURL.deletingPathExtension().appendingPathExtension("m4a")
+            }
+
+            try await exportToM4A(from: sourceURL, to: actualDestination)
+
+            // If user wanted .mp3, rename the file
+            if outputExtension == "mp3" && actualDestination != destinationURL {
+                try? FileManager.default.removeItem(at: destinationURL)
+                try FileManager.default.moveItem(at: actualDestination, to: destinationURL)
+            }
+        }
+
+        print("MP3Encoder: Successfully saved to \(destinationURL.path)")
+    }
+
+    private func copyFile(from sourceURL: URL, to destinationURL: URL) throws {
+        try? FileManager.default.removeItem(at: destinationURL)
+        try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+    }
+
+    private func exportToM4A(from sourceURL: URL, to destinationURL: URL) async throws {
+        // Remove existing file
+        try? FileManager.default.removeItem(at: destinationURL)
 
         // Create asset from source
         let asset = AVURLAsset(url: sourceURL)
 
-        // Check if we can export to MP3-like format
-        // Note: macOS doesn't natively support MP3 encoding in AVFoundation
-        // We'll export to M4A (AAC) which is widely compatible, or use
-        // a pass-through approach for the WAV file
-
-        // For true MP3 support, we'll use a shell command with ffmpeg if available,
-        // otherwise fall back to M4A
-
-        if await canUseFFmpeg() {
-            try await encodeWithFFmpeg(from: sourceURL, to: destinationURL)
-        } else {
-            // Fall back to M4A (AAC) format - rename extension if needed
-            let m4aURL = destinationURL.deletingPathExtension().appendingPathExtension("m4a")
-            try await encodeToM4A(asset: asset, to: m4aURL)
-
-            // If user specifically wanted .mp3 extension, we'll keep the M4A content
-            // but note that it's actually AAC audio
-            if destinationURL.pathExtension.lowercased() == "mp3" {
-                try? FileManager.default.removeItem(at: destinationURL)
-                try FileManager.default.moveItem(at: m4aURL, to: destinationURL)
-            }
+        // Load tracks to ensure asset is ready
+        let tracks = try await asset.loadTracks(withMediaType: .audio)
+        guard !tracks.isEmpty else {
+            print("MP3Encoder: No audio tracks found in source")
+            throw EncoderError.failedToReadSource
         }
-    }
 
-    private func canUseFFmpeg() async -> Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        process.arguments = ["ffmpeg"]
+        print("MP3Encoder: Found \(tracks.count) audio track(s)")
 
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
+        // Try export presets in order of preference
+        let presets = [
+            AVAssetExportPresetAppleM4A,
+            AVAssetExportPresetHighestQuality,
+            AVAssetExportPresetMediumQuality
+        ]
 
-        do {
-            try process.run()
-            process.waitUntilExit()
-            return process.terminationStatus == 0
-        } catch {
-            return false
-        }
-    }
+        for preset in presets {
+            let compatible = await AVAssetExportSession.compatibility(
+                ofExportPreset: preset,
+                with: asset,
+                outputFileType: .m4a
+            )
 
-    private func encodeWithFFmpeg(from sourceURL: URL, to destinationURL: URL) async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = [
-                "ffmpeg",
-                "-y",  // Overwrite output
-                "-i", sourceURL.path,  // Input file
-                "-codec:a", "libmp3lame",  // MP3 codec
-                "-b:a", "192k",  // Bitrate
-                "-ar", "44100",  // Sample rate
-                destinationURL.path  // Output file
-            ]
+            if compatible {
+                print("MP3Encoder: Using preset: \(preset)")
 
-            let errorPipe = Pipe()
-            process.standardError = errorPipe
-            process.standardOutput = FileHandle.nullDevice
+                guard let exportSession = AVAssetExportSession(
+                    asset: asset,
+                    presetName: preset
+                ) else {
+                    continue
+                }
 
-            process.terminationHandler = { process in
-                if process.terminationStatus == 0 {
-                    continuation.resume()
-                } else {
-                    let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-                    let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
-                    continuation.resume(throwing: EncoderError.exportFailed(errorMessage))
+                exportSession.outputURL = destinationURL
+                exportSession.outputFileType = .m4a
+
+                await exportSession.export()
+
+                switch exportSession.status {
+                case .completed:
+                    return
+                case .failed:
+                    let error = exportSession.error?.localizedDescription ?? "Unknown error"
+                    print("MP3Encoder: Export failed with preset \(preset): \(error)")
+                    continue
+                case .cancelled:
+                    throw EncoderError.exportFailed("Export cancelled")
+                default:
+                    continue
                 }
             }
-
-            do {
-                try process.run()
-            } catch {
-                continuation.resume(throwing: error)
-            }
-        }
-    }
-
-    private func encodeToM4A(asset: AVURLAsset, to destinationURL: URL) async throws {
-        // Remove existing file
-        try? FileManager.default.removeItem(at: destinationURL)
-
-        guard let exportSession = AVAssetExportSession(
-            asset: asset,
-            presetName: AVAssetExportPresetAppleM4A
-        ) else {
-            throw EncoderError.failedToCreateExportSession
         }
 
-        exportSession.outputURL = destinationURL
-        exportSession.outputFileType = .m4a
-
-        await exportSession.export()
-
-        switch exportSession.status {
-        case .completed:
-            return
-        case .failed:
-            throw EncoderError.exportFailed(exportSession.error?.localizedDescription ?? "Unknown error")
-        case .cancelled:
-            throw EncoderError.exportFailed("Export cancelled")
-        default:
-            throw EncoderError.exportFailed("Unknown export status")
-        }
+        // If all presets fail, just copy the WAV
+        print("MP3Encoder: All export presets failed, copying WAV instead")
+        let wavDestination = destinationURL.deletingPathExtension().appendingPathExtension("wav")
+        try copyFile(from: sourceURL, to: wavDestination)
     }
 }
