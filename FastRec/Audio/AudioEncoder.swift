@@ -1,7 +1,29 @@
 import Foundation
 import AVFoundation
 
-class MP3Encoder {
+enum AudioFormat: String, CaseIterable {
+    case wav = "WAV"
+    case aiff = "AIFF"
+    case m4a = "M4A (AAC)"
+
+    var fileExtension: String {
+        switch self {
+        case .wav: return "wav"
+        case .aiff: return "aiff"
+        case .m4a: return "m4a"
+        }
+    }
+
+    var utType: String {
+        switch self {
+        case .wav: return "public.wav"
+        case .aiff: return "public.aiff-audio"
+        case .m4a: return "public.mpeg-4-audio"
+        }
+    }
+}
+
+class AudioEncoder {
     enum EncoderError: Error, LocalizedError {
         case sourceFileNotFound
         case failedToReadSource
@@ -25,47 +47,34 @@ class MP3Encoder {
         }
     }
 
-    /// Encode audio file to M4A format (AAC)
-    /// Note: macOS doesn't natively support MP3 encoding, so we use M4A/AAC
-    /// which is widely compatible and higher quality
-    func encode(from sourceURL: URL, to destinationURL: URL) async throws {
+    /// Encode audio file to specified format
+    func encode(from sourceURL: URL, to destinationURL: URL, format: AudioFormat) async throws {
         // Check source file exists
         guard FileManager.default.fileExists(atPath: sourceURL.path) else {
-            print("MP3Encoder: Source file not found at \(sourceURL.path)")
+            print("AudioEncoder: Source file not found at \(sourceURL.path)")
             throw EncoderError.sourceFileNotFound
         }
 
         // Get file size for debugging
         let attrs = try? FileManager.default.attributesOfItem(atPath: sourceURL.path)
         let fileSize = attrs?[.size] as? Int64 ?? 0
-        print("MP3Encoder: Source file size: \(fileSize) bytes")
+        print("AudioEncoder: Source file size: \(fileSize) bytes, target format: \(format.rawValue)")
 
-        // Determine output format based on extension
-        let outputExtension = destinationURL.pathExtension.lowercased()
-
-        if outputExtension == "wav" {
-            // Just copy the WAV file
+        switch format {
+        case .wav:
+            // Just copy the WAV file (already lossless)
             try copyFile(from: sourceURL, to: destinationURL)
-        } else {
-            // Export to M4A (AAC)
-            let actualDestination: URL
-            if outputExtension == "mp3" || outputExtension == "m4a" {
-                // Change extension to m4a for proper format
-                actualDestination = destinationURL.deletingPathExtension().appendingPathExtension("m4a")
-            } else {
-                actualDestination = destinationURL.deletingPathExtension().appendingPathExtension("m4a")
-            }
 
-            try await exportToM4A(from: sourceURL, to: actualDestination)
+        case .aiff:
+            // Convert WAV to AIFF
+            try await convertToAIFF(from: sourceURL, to: destinationURL)
 
-            // If user wanted .mp3, rename the file
-            if outputExtension == "mp3" && actualDestination != destinationURL {
-                try? FileManager.default.removeItem(at: destinationURL)
-                try FileManager.default.moveItem(at: actualDestination, to: destinationURL)
-            }
+        case .m4a:
+            // Convert to M4A (AAC)
+            try await exportToM4A(from: sourceURL, to: destinationURL)
         }
 
-        print("MP3Encoder: Successfully saved to \(destinationURL.path)")
+        print("AudioEncoder: Successfully saved to \(destinationURL.path)")
     }
 
     private func copyFile(from sourceURL: URL, to destinationURL: URL) throws {
@@ -73,21 +82,60 @@ class MP3Encoder {
         try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
     }
 
-    private func exportToM4A(from sourceURL: URL, to destinationURL: URL) async throws {
-        // Remove existing file
+    private func convertToAIFF(from sourceURL: URL, to destinationURL: URL) async throws {
         try? FileManager.default.removeItem(at: destinationURL)
 
-        // Create asset from source
+        // Read source WAV file
+        let sourceFile = try AVAudioFile(forReading: sourceURL)
+        let format = sourceFile.processingFormat
+        let frameCount = AVAudioFrameCount(sourceFile.length)
+
+        // Create AIFF settings
+        let aiffSettings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: format.sampleRate,
+            AVNumberOfChannelsKey: format.channelCount,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsBigEndianKey: true  // AIFF uses big-endian
+        ]
+
+        // Create output file
+        let outputFile = try AVAudioFile(
+            forWriting: destinationURL,
+            settings: aiffSettings,
+            commonFormat: .pcmFormatFloat32,
+            interleaved: false
+        )
+
+        // Read and write in chunks
+        let bufferSize: AVAudioFrameCount = 65536
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: bufferSize) else {
+            throw EncoderError.failedToCreateExportSession
+        }
+
+        var framesRemaining = frameCount
+        while framesRemaining > 0 {
+            let framesToRead = min(bufferSize, framesRemaining)
+            try sourceFile.read(into: buffer, frameCount: framesToRead)
+            try outputFile.write(from: buffer)
+            framesRemaining -= framesToRead
+        }
+    }
+
+    private func exportToM4A(from sourceURL: URL, to destinationURL: URL) async throws {
+        try? FileManager.default.removeItem(at: destinationURL)
+
         let asset = AVURLAsset(url: sourceURL)
 
         // Load tracks to ensure asset is ready
         let tracks = try await asset.loadTracks(withMediaType: .audio)
         guard !tracks.isEmpty else {
-            print("MP3Encoder: No audio tracks found in source")
+            print("AudioEncoder: No audio tracks found in source")
             throw EncoderError.failedToReadSource
         }
 
-        print("MP3Encoder: Found \(tracks.count) audio track(s)")
+        print("AudioEncoder: Found \(tracks.count) audio track(s)")
 
         // Try export presets in order of preference
         let presets = [
@@ -104,7 +152,7 @@ class MP3Encoder {
             )
 
             if compatible {
-                print("MP3Encoder: Using preset: \(preset)")
+                print("AudioEncoder: Using preset: \(preset)")
 
                 guard let exportSession = AVAssetExportSession(
                     asset: asset,
@@ -123,7 +171,7 @@ class MP3Encoder {
                     return
                 case .failed:
                     let error = exportSession.error?.localizedDescription ?? "Unknown error"
-                    print("MP3Encoder: Export failed with preset \(preset): \(error)")
+                    print("AudioEncoder: Export failed with preset \(preset): \(error)")
                     continue
                 case .cancelled:
                     throw EncoderError.exportFailed("Export cancelled")
@@ -133,8 +181,8 @@ class MP3Encoder {
             }
         }
 
-        // If all presets fail, just copy the WAV
-        print("MP3Encoder: All export presets failed, copying WAV instead")
+        // If all presets fail, copy as WAV instead
+        print("AudioEncoder: All export presets failed, copying WAV instead")
         let wavDestination = destinationURL.deletingPathExtension().appendingPathExtension("wav")
         try copyFile(from: sourceURL, to: wavDestination)
     }

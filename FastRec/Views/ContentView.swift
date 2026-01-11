@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import AppKit
 
 struct ContentView: View {
     @ObservedObject var recorderState: RecorderState
@@ -48,7 +49,7 @@ struct ContentView: View {
 
                 // Save button
                 Button(action: {
-                    showingSavePanel = true
+                    presentSavePanel()
                 }) {
                     HStack(spacing: 3) {
                         Text("Save as...")
@@ -66,11 +67,6 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(white: 0.1))
-        .onChange(of: showingSavePanel) { _, newValue in
-            if newValue {
-                presentSavePanel()
-            }
-        }
     }
 
     private func handleMainButtonTap() async {
@@ -93,21 +89,85 @@ struct ContentView: View {
     }
 
     private func presentSavePanel() {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.mpeg4Audio, .wav]
-        panel.nameFieldStringValue = "Recording.m4a"
-        panel.canCreateDirectories = true
+        // Create format popup
+        let formatPopup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 200, height: 24), pullsDown: false)
+        for format in AudioFormat.allCases {
+            formatPopup.addItem(withTitle: format.rawValue)
+        }
+        formatPopup.selectItem(at: 0)  // Default to WAV
 
-        panel.begin { response in
-            showingSavePanel = false
+        // Create accessory view with label and popup
+        let accessoryView = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 32))
+        let label = NSTextField(labelWithString: "Format:")
+        label.frame = NSRect(x: 0, y: 6, width: 50, height: 20)
+        formatPopup.frame = NSRect(x: 55, y: 2, width: 150, height: 26)
+        accessoryView.addSubview(label)
+        accessoryView.addSubview(formatPopup)
+
+        // Configure save panel
+        let panel = NSSavePanel()
+        panel.accessoryView = accessoryView
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = "Recording.wav"
+        panel.allowedContentTypes = [.wav]
+        panel.level = .floating
+        panel.isExtensionHidden = false
+
+        // Update allowed types and filename when format changes
+        formatPopup.target = FormatChangeHandler.shared
+        formatPopup.action = #selector(FormatChangeHandler.formatChanged(_:))
+        FormatChangeHandler.shared.panel = panel
+
+        // Run modal on main thread for reliable input handling
+        DispatchQueue.main.async {
+            NSApp.activate(ignoringOtherApps: true)
+            let response = panel.runModal()
+
             if response == .OK, let url = panel.url {
+                let selectedIndex = formatPopup.indexOfSelectedItem
+                let format = AudioFormat.allCases[selectedIndex]
+
+                // Ensure correct extension
+                var finalURL = url
+                if url.pathExtension.lowercased() != format.fileExtension {
+                    finalURL = url.deletingPathExtension().appendingPathExtension(format.fileExtension)
+                }
+
                 Task {
-                    let success = await recorderState.saveRecording(to: url)
+                    let success = await recorderState.saveRecording(to: finalURL, format: format)
                     if !success {
                         print("Failed to save recording")
                     }
                 }
             }
         }
+    }
+}
+
+// Helper class to handle format popup changes
+class FormatChangeHandler: NSObject {
+    static let shared = FormatChangeHandler()
+    weak var panel: NSSavePanel?
+
+    @objc func formatChanged(_ sender: NSPopUpButton) {
+        guard let panel = panel else { return }
+
+        let selectedIndex = sender.indexOfSelectedItem
+        let format = AudioFormat.allCases[selectedIndex]
+
+        // Update allowed content type
+        switch format {
+        case .wav:
+            panel.allowedContentTypes = [.wav]
+        case .aiff:
+            panel.allowedContentTypes = [.aiff]
+        case .m4a:
+            panel.allowedContentTypes = [.mpeg4Audio]
+        }
+
+        // Update filename extension
+        let currentName = panel.nameFieldStringValue
+        let baseName = (currentName as NSString).deletingPathExtension
+        panel.nameFieldStringValue = "\(baseName).\(format.fileExtension)"
     }
 }

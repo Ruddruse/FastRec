@@ -1,16 +1,19 @@
 import Cocoa
 import SwiftUI
+import Combine
 
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var recorderWindow: RecorderWindow?
     private var recorderState: RecorderState?
+    private var stateObserver: AnyCancellable?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         recorderState = RecorderState()
         setupMenuBar()
         setupRecorderWindow()
+        setupStateObserver()
 
         // Hide dock icon
         NSApp.setActivationPolicy(.accessory)
@@ -20,12 +23,35 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         if let button = statusItem?.button {
-            let image = NSImage(systemSymbolName: "record.circle", accessibilityDescription: "FastRec")
-            image?.isTemplate = true
-            button.image = image
+            updateMenuBarIcon(isRecording: false)
             button.action = #selector(statusItemClicked)
             button.target = self
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        }
+    }
+
+    private func setupStateObserver() {
+        stateObserver = recorderState?.$state
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] state in
+                self?.updateMenuBarIcon(isRecording: state == .recording)
+            }
+    }
+
+    private func updateMenuBarIcon(isRecording: Bool) {
+        guard let button = statusItem?.button else { return }
+
+        if isRecording {
+            // Filled red circle when recording
+            let image = NSImage(systemSymbolName: "record.circle.fill", accessibilityDescription: "Recording")
+            // Apply red tint for recording state
+            let config = NSImage.SymbolConfiguration(paletteColors: [.systemRed])
+            button.image = image?.withSymbolConfiguration(config)
+        } else {
+            // Normal template icon when not recording
+            let image = NSImage(systemSymbolName: "record.circle", accessibilityDescription: "FastRec")
+            image?.isTemplate = true
+            button.image = image
         }
     }
 

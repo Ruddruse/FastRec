@@ -20,6 +20,7 @@ class RecorderState: ObservableObject {
     private var audioPlayer: AVAudioPlayer?
     private var audioCapture: SystemAudioCapture?
     private var audioRecorder: AudioRecorder?
+    private var playbackDelegate: PlaybackDelegate?  // Retain delegate to prevent deallocation
 
     // Waveform display samples (for visualization)
     private let maxWaveformSamples = 50
@@ -80,7 +81,8 @@ class RecorderState: ObservableObject {
 
         do {
             audioPlayer = try AVAudioPlayer(contentsOf: url)
-            audioPlayer?.delegate = PlaybackDelegate(state: self)
+            playbackDelegate = PlaybackDelegate(state: self)  // Store reference
+            audioPlayer?.delegate = playbackDelegate
             audioPlayer?.play()
             state = .playing
             elapsedTime = 0
@@ -93,6 +95,7 @@ class RecorderState: ObservableObject {
     func stopPlayback() {
         audioPlayer?.stop()
         audioPlayer = nil
+        playbackDelegate = nil
         stopTimer()
         state = .recorded
     }
@@ -113,13 +116,12 @@ class RecorderState: ObservableObject {
         state = .idle
     }
 
-    func saveRecording(to url: URL) async -> Bool {
+    func saveRecording(to url: URL, format: AudioFormat) async -> Bool {
         guard let sourceURL = recordedAudioURL else { return false }
 
         do {
-            // Encode to MP3
-            let encoder = MP3Encoder()
-            try await encoder.encode(from: sourceURL, to: url)
+            let encoder = AudioEncoder()
+            try await encoder.encode(from: sourceURL, to: url, format: format)
             return true
         } catch {
             print("Failed to save recording: \(error)")
