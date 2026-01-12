@@ -3,28 +3,46 @@
 import Cocoa
 import Foundation
 
-// Icon sizes needed for macOS
-let iconSizes: [(size: Int, scale: String)] = [
-    (16, "1x"),
-    (32, "2x"),   // 16pt @2x
-    (32, "1x"),
-    (64, "2x"),   // 32pt @2x
-    (128, "1x"),
-    (256, "2x"),  // 128pt @2x
-    (256, "1x"),
-    (512, "2x"),  // 256pt @2x
-    (512, "1x"),
-    (1024, "2x")  // 512pt @2x
+// Icon sizes needed for macOS (in pixels)
+// Format: (point size, scale, pixel size)
+let iconSizes: [(pt: Int, scale: Int, px: Int)] = [
+    (16, 1, 16),
+    (16, 2, 32),
+    (32, 1, 32),
+    (32, 2, 64),
+    (128, 1, 128),
+    (128, 2, 256),
+    (256, 1, 256),
+    (256, 2, 512),
+    (512, 1, 512),
+    (512, 2, 1024)
 ]
 
-func drawIcon(size: CGFloat) -> NSImage {
-    let image = NSImage(size: NSSize(width: size, height: size))
+func drawIcon(pixelSize: Int) -> NSBitmapImageRep {
+    let size = CGFloat(pixelSize)
 
-    image.lockFocus()
+    // Create bitmap at exact pixel size
+    let bitmap = NSBitmapImageRep(
+        bitmapDataPlanes: nil,
+        pixelsWide: pixelSize,
+        pixelsHigh: pixelSize,
+        bitsPerSample: 8,
+        samplesPerPixel: 4,
+        hasAlpha: true,
+        isPlanar: false,
+        colorSpaceName: .deviceRGB,
+        bytesPerRow: 0,
+        bitsPerPixel: 0
+    )!
+
+    bitmap.size = NSSize(width: pixelSize, height: pixelSize)
+
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmap)
 
     guard let context = NSGraphicsContext.current?.cgContext else {
-        image.unlockFocus()
-        return image
+        NSGraphicsContext.restoreGraphicsState()
+        return bitmap
     }
 
     let rect = CGRect(x: 0, y: 0, width: size, height: size)
@@ -171,30 +189,28 @@ func drawIcon(size: CGFloat) -> NSImage {
     NSColor.white.withAlphaComponent(0.95).setFill()
     innerDot.fill()
 
-    image.unlockFocus()
-    return image
+    NSGraphicsContext.restoreGraphicsState()
+    return bitmap
 }
 
-func saveIcon(_ image: NSImage, size: Int, scale: String, to directory: URL) {
+func saveIcon(_ bitmap: NSBitmapImageRep, pt: Int, scale: Int, to directory: URL) {
     let filename: String
-    if scale == "1x" {
-        filename = "icon_\(size)x\(size).png"
+    if scale == 1 {
+        filename = "icon_\(pt)x\(pt).png"
     } else {
-        filename = "icon_\(size/2)x\(size/2)@2x.png"
+        filename = "icon_\(pt)x\(pt)@2x.png"
     }
 
     let url = directory.appendingPathComponent(filename)
 
-    guard let tiffData = image.tiffRepresentation,
-          let bitmap = NSBitmapImageRep(data: tiffData),
-          let pngData = bitmap.representation(using: .png, properties: [:]) else {
+    guard let pngData = bitmap.representation(using: .png, properties: [:]) else {
         print("Failed to create PNG for \(filename)")
         return
     }
 
     do {
         try pngData.write(to: url)
-        print("Created: \(filename)")
+        print("Created: \(filename) (\(bitmap.pixelsWide)x\(bitmap.pixelsHigh) pixels)")
     } catch {
         print("Failed to write \(filename): \(error)")
     }
@@ -209,9 +225,9 @@ try? FileManager.default.createDirectory(at: outputDir, withIntermediateDirector
 
 print("Generating app icons...")
 
-for (size, scale) in iconSizes {
-    let image = drawIcon(size: CGFloat(size))
-    saveIcon(image, size: size, scale: scale, to: outputDir)
+for iconSize in iconSizes {
+    let bitmap = drawIcon(pixelSize: iconSize.px)
+    saveIcon(bitmap, pt: iconSize.pt, scale: iconSize.scale, to: outputDir)
 }
 
 // Update Contents.json
@@ -291,3 +307,5 @@ try? contentsJson.write(to: contentsURL, atomically: true, encoding: .utf8)
 print("Updated Contents.json")
 
 print("\nDone! App icons generated in: \(outputDir.path)")
+print("\nTo apply: Re-run this script from the project root directory on your Mac:")
+print("  swift GenerateAppIcon.swift")

@@ -225,7 +225,6 @@ private class AudioStreamOutput: NSObject, SCStreamOutput {
         // Copy to PCM buffer
         if let floatChannelData = pcmBuffer.floatChannelData {
             let channelCount = Int(format.channelCount)
-            let bytesPerFrame = Int(asbd.pointee.mBytesPerFrame)
 
             if asbd.pointee.mFormatFlags & kAudioFormatFlagIsFloat != 0 {
                 // Float format - direct copy
