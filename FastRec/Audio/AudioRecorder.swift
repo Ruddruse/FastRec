@@ -1,7 +1,7 @@
 import Foundation
 import AVFoundation
 
-class AudioRecorder {
+class AudioRecorder: @unchecked Sendable {
     private var audioFile: AVAudioFile?
     private var tempFileURL: URL?
     private let fileManager = FileManager.default

@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import Combine
+import AppKit
 
 enum RecordingState {
     case idle
@@ -57,6 +58,41 @@ class RecorderState: ObservableObject {
             startTimer()
         } catch {
             print("Failed to start recording: \(error)")
+            
+            // Show alert for permission issues
+            if let captureError = error as? CaptureError {
+                await showPermissionAlert(for: captureError)
+            }
+            
+            state = .idle
+        }
+    }
+    
+    private func showPermissionAlert(for error: CaptureError) async {
+        let alert = NSAlert()
+        alert.messageText = "Recording Permission Required"
+        
+        switch error {
+        case .permissionDenied:
+            alert.informativeText = "FastRec needs Screen Recording permission to capture system audio. Please enable it in System Settings > Privacy & Security > Screen Recording."
+            alert.addButton(withTitle: "Open System Settings")
+            alert.addButton(withTitle: "Cancel")
+        case .noDisplayFound:
+            alert.informativeText = "No display was found for recording."
+            alert.addButton(withTitle: "OK")
+        case .failedToCreateOutput:
+            alert.informativeText = "Failed to initialize audio recording system."
+            alert.addButton(withTitle: "OK")
+        }
+        
+        alert.alertStyle = .warning
+        
+        let response = await alert.runModal()
+        if response == .alertFirstButtonReturn && error == .permissionDenied {
+            // Open System Settings to Screen Recording
+            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+                NSWorkspace.shared.open(url)
+            }
         }
     }
 
@@ -80,6 +116,14 @@ class RecorderState: ObservableObject {
         guard state == .recorded, let url = recordedAudioURL else { return }
 
         do {
+            // Configure audio session for playback
+            #if os(macOS)
+            // macOS doesn't require audio session configuration
+            #else
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+            try AVAudioSession.sharedInstance().setActive(true)
+            #endif
+            
             audioPlayer = try AVAudioPlayer(contentsOf: url)
             playbackDelegate = PlaybackDelegate(state: self)  // Store reference
             audioPlayer?.delegate = playbackDelegate

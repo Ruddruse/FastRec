@@ -1,5 +1,4 @@
 import SwiftUI
-import UniformTypeIdentifiers
 import AppKit
 
 struct ContentView: View {
@@ -113,10 +112,13 @@ struct ContentView: View {
         panel.level = .floating
         panel.isExtensionHidden = false
 
-        // Update allowed types and filename when format changes
-        formatPopup.target = FormatChangeHandler.shared
+        // Create handler for this specific panel and retain it
+        let handler = FormatChangeHandler(panel: panel)
+        formatPopup.target = handler
         formatPopup.action = #selector(FormatChangeHandler.formatChanged(_:))
-        FormatChangeHandler.shared.panel = panel
+        
+        // Retain handler using objc_setAssociatedObject to keep it alive
+        objc_setAssociatedObject(panel, "formatChangeHandler", handler, .OBJC_ASSOCIATION_RETAIN)
 
         // Run modal on main thread for reliable input handling
         DispatchQueue.main.async {
@@ -140,14 +142,21 @@ struct ContentView: View {
                     }
                 }
             }
+            
+            // Clean up retained object
+            objc_setAssociatedObject(panel, "formatChangeHandler", nil, .OBJC_ASSOCIATION_RETAIN)
         }
     }
 }
 
 // Helper class to handle format popup changes
 class FormatChangeHandler: NSObject {
-    static let shared = FormatChangeHandler()
     weak var panel: NSSavePanel?
+    
+    init(panel: NSSavePanel) {
+        self.panel = panel
+        super.init()
+    }
 
     @objc func formatChanged(_ sender: NSPopUpButton) {
         guard let panel = panel else { return }

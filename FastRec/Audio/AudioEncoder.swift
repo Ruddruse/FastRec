@@ -23,7 +23,7 @@ enum AudioFormat: String, CaseIterable {
     }
 }
 
-class AudioEncoder {
+class AudioEncoder: @unchecked Sendable {
     enum EncoderError: Error, LocalizedError {
         case sourceFileNotFound
         case failedToReadSource
@@ -50,13 +50,13 @@ class AudioEncoder {
     /// Encode audio file to specified format
     func encode(from sourceURL: URL, to destinationURL: URL, format: AudioFormat) async throws {
         // Check source file exists
-        guard FileManager.default.fileExists(atPath: sourceURL.path) else {
-            print("AudioEncoder: Source file not found at \(sourceURL.path)")
+        guard FileManager.default.fileExists(atPath: sourceURL.path(percentEncoded: false)) else {
+            print("AudioEncoder: Source file not found at \(sourceURL.path(percentEncoded: false))")
             throw EncoderError.sourceFileNotFound
         }
 
         // Get file size for debugging
-        let attrs = try? FileManager.default.attributesOfItem(atPath: sourceURL.path)
+        let attrs = try? FileManager.default.attributesOfItem(atPath: sourceURL.path(percentEncoded: false))
         let fileSize = attrs?[.size] as? Int64 ?? 0
         print("AudioEncoder: Source file size: \(fileSize) bytes, target format: \(format.rawValue)")
 
@@ -74,7 +74,7 @@ class AudioEncoder {
             try await exportToM4A(from: sourceURL, to: destinationURL)
         }
 
-        print("AudioEncoder: Successfully saved to \(destinationURL.path)")
+        print("AudioEncoder: Successfully saved to \(destinationURL.path(percentEncoded: false))")
     }
 
     private func copyFile(from sourceURL: URL, to destinationURL: URL) throws {

@@ -3,7 +3,7 @@ import ScreenCaptureKit
 import AVFoundation
 import CoreMedia
 
-class SystemAudioCapture: NSObject {
+class SystemAudioCapture: NSObject, @unchecked Sendable {
     private var stream: SCStream?
     private var streamOutput: AudioStreamOutput?
 
@@ -33,7 +33,17 @@ class SystemAudioCapture: NSObject {
 
     func startCapture() async throws {
         // Get available content
-        let availableContent = try await SCShareableContent.current
+        let availableContent: SCShareableContent
+        do {
+            availableContent = try await SCShareableContent.current
+        } catch {
+            print("Failed to get shareable content: \(error)")
+            // Check if it's a permission error
+            if (error as NSError).domain == "com.apple.screencapturekit" {
+                throw CaptureError.permissionDenied
+            }
+            throw error
+        }
 
         guard let display = availableContent.displays.first else {
             throw CaptureError.noDisplayFound
@@ -79,7 +89,12 @@ class SystemAudioCapture: NSObject {
         )
 
         // Start capturing
-        try await stream?.startCapture()
+        do {
+            try await stream?.startCapture()
+        } catch {
+            print("Failed to start capture: \(error)")
+            throw CaptureError.permissionDenied
+        }
     }
 
     func stopCapture() async {
