@@ -86,7 +86,7 @@ class AudioEncoder: @unchecked Sendable {
         try? FileManager.default.removeItem(at: destinationURL)
 
         // Read source WAV file
-        let sourceFile = try AVAudioFile(forReading: sourceURL)
+        let sourceFile = try AVAudioFile(forReading: sourceURL, commonFormat: .pcmFormatFloat32, interleaved: false)
         let format = sourceFile.processingFormat
         let frameCount = AVAudioFrameCount(sourceFile.length)
 
@@ -137,18 +137,32 @@ class AudioEncoder: @unchecked Sendable {
 
         print("AudioEncoder: Found \(tracks.count) audio track(s)")
 
-        // Use new macOS 15+ export API
-        do {
-            try await AVAssetExportSession.export(from: asset, to: destinationURL, as: .m4a)
-            print("AudioEncoder: Export completed successfully")
-            return
-        } catch {
-            print("AudioEncoder: Export failed: \(error.localizedDescription)")
+        // Create export session - use the modern initializer
+        guard let exportSession = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetAppleM4A) else {
+            print("AudioEncoder: Failed to create export session")
+            throw EncoderError.failedToCreateExportSession
         }
 
-        // If export fails, copy as WAV instead
-        print("AudioEncoder: Export failed, copying WAV instead")
-        let wavDestination = destinationURL.deletingPathExtension().appendingPathExtension("wav")
-        try copyFile(from: sourceURL, to: wavDestination)
+        exportSession.outputURL = destinationURL
+        exportSession.outputFileType = .m4a
+
+        // Export the audio using the modern async export method
+        await exportSession.export()
+
+        // Check the result
+        switch exportSession.status {
+        case .completed:
+            print("AudioEncoder: Export completed successfully")
+        case .failed:
+            let errorMessage = exportSession.error?.localizedDescription ?? "Unknown error"
+            print("AudioEncoder: Export failed: \(errorMessage)")
+            throw EncoderError.exportFailed(errorMessage)
+        case .cancelled:
+            print("AudioEncoder: Export was cancelled")
+            throw EncoderError.exportFailed("Export cancelled")
+        default:
+            print("AudioEncoder: Export ended with unexpected status: \(exportSession.status.rawValue)")
+            throw EncoderError.exportFailed("Unexpected status")
+        }
     }
 }
