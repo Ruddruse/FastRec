@@ -137,52 +137,17 @@ class AudioEncoder: @unchecked Sendable {
 
         print("AudioEncoder: Found \(tracks.count) audio track(s)")
 
-        // Try export presets in order of preference
-        let presets = [
-            AVAssetExportPresetAppleM4A,
-            AVAssetExportPresetHighestQuality,
-            AVAssetExportPresetMediumQuality
-        ]
-
-        for preset in presets {
-            let compatible = await AVAssetExportSession.compatibility(
-                ofExportPreset: preset,
-                with: asset,
-                outputFileType: .m4a
-            )
-
-            if compatible {
-                print("AudioEncoder: Using preset: \(preset)")
-
-                guard let exportSession = AVAssetExportSession(
-                    asset: asset,
-                    presetName: preset
-                ) else {
-                    continue
-                }
-
-                exportSession.outputURL = destinationURL
-                exportSession.outputFileType = .m4a
-
-                await exportSession.export()
-
-                switch exportSession.status {
-                case .completed:
-                    return
-                case .failed:
-                    let error = exportSession.error?.localizedDescription ?? "Unknown error"
-                    print("AudioEncoder: Export failed with preset \(preset): \(error)")
-                    continue
-                case .cancelled:
-                    throw EncoderError.exportFailed("Export cancelled")
-                default:
-                    continue
-                }
-            }
+        // Use new macOS 15+ export API
+        do {
+            try await AVAssetExportSession.export(from: asset, to: destinationURL, as: .m4a)
+            print("AudioEncoder: Export completed successfully")
+            return
+        } catch {
+            print("AudioEncoder: Export failed: \(error.localizedDescription)")
         }
 
-        // If all presets fail, copy as WAV instead
-        print("AudioEncoder: All export presets failed, copying WAV instead")
+        // If export fails, copy as WAV instead
+        print("AudioEncoder: Export failed, copying WAV instead")
         let wavDestination = destinationURL.deletingPathExtension().appendingPathExtension("wav")
         try copyFile(from: sourceURL, to: wavDestination)
     }
