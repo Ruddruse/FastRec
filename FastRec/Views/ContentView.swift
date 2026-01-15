@@ -6,7 +6,7 @@ struct ContentView: View {
     @State private var showingSavePanel = false
 
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 12) {
             // Row 1: Waveform + Record button
             HStack(spacing: 12) {
                 // Waveform view (dots)
@@ -14,7 +14,7 @@ struct ContentView: View {
                     samples: recorderState.waveformSamples,
                     state: recorderState.state
                 )
-                .frame(height: 24)
+                .frame(height: 28)
 
                 // Record/Stop/Play button
                 RecordButton(state: recorderState.state) {
@@ -23,14 +23,15 @@ struct ContentView: View {
                     }
                 }
             }
-            .padding(.top, 10)
+            .frame(height: 28)
 
             // Row 2: Timer + Controls
             HStack(spacing: 12) {
-                // Timer display (left aligned)
+                // Timer display
                 Text(formatTime(recorderState.elapsedTime))
-                    .font(.system(size: 20, weight: .light, design: .monospaced))
+                    .font(.system(size: 22, weight: .light, design: .monospaced))
                     .foregroundColor(.white)
+                    .frame(minWidth: 60, alignment: .leading)
 
                 Spacer()
 
@@ -41,10 +42,10 @@ struct ContentView: View {
                     Text("Clear")
                         .font(.system(size: 11))
                         .foregroundColor(.white.opacity(0.8))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
                         .background(
-                            RoundedRectangle(cornerRadius: 4)
+                            RoundedRectangle(cornerRadius: 5)
                                 .fill(Color.white.opacity(0.08))
                         )
                 }
@@ -56,13 +57,13 @@ struct ContentView: View {
                 Button(action: {
                     presentSavePanel()
                 }) {
-                    Text("Save as...")
+                    Text("Save")
                         .font(.system(size: 11))
                         .foregroundColor(.white.opacity(0.8))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
                         .background(
-                            RoundedRectangle(cornerRadius: 4)
+                            RoundedRectangle(cornerRadius: 5)
                                 .fill(Color.white.opacity(0.08))
                         )
                 }
@@ -70,9 +71,10 @@ struct ContentView: View {
                 .disabled(recorderState.state != .recorded)
                 .opacity(recorderState.state != .recorded ? 0.3 : 1.0)
             }
-            .padding(.bottom, 10)
+            .frame(height: 28)
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(white: 0.1))
     }
