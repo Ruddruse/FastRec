@@ -6,38 +6,15 @@ struct ContentView: View {
     @State private var showingSavePanel = false
 
     var body: some View {
-        VStack(spacing: 12) {
-            // Top spacing for title bar area
-            Spacer()
-                .frame(height: 8)
-
-            // Waveform view
-            WaveformView(
-                samples: recorderState.waveformSamples,
-                state: recorderState.state
-            )
-            .frame(height: 50)
-            .padding(.horizontal, 16)
-
-            // Timer display
-            Text(formatTime(recorderState.elapsedTime))
-                .font(.system(size: 28, weight: .light, design: .monospaced))
-                .foregroundColor(.white)
-
-            // Controls
-            HStack(spacing: 24) {
-                // Clear button
-                Button(action: {
-                    recorderState.clearRecording()
-                }) {
-                    Text("Clear")
-                        .font(.system(size: 13))
-                        .foregroundColor(.white.opacity(0.7))
-                        .frame(width: 55)
-                }
-                .buttonStyle(.plain)
-                .disabled(recorderState.state == .idle || recorderState.state == .recording)
-                .opacity(recorderState.state == .idle || recorderState.state == .recording ? 0.3 : 1.0)
+        VStack(spacing: 8) {
+            // Row 1: Waveform + Record button
+            HStack(spacing: 12) {
+                // Waveform view (dots)
+                WaveformView(
+                    samples: recorderState.waveformSamples,
+                    state: recorderState.state
+                )
+                .frame(height: 30)
 
                 // Record/Stop/Play button
                 RecordButton(state: recorderState.state) {
@@ -45,24 +22,45 @@ struct ContentView: View {
                         await handleMainButtonTap()
                     }
                 }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+
+            // Row 2: Timer + Controls
+            HStack {
+                // Timer display (left aligned)
+                Text(formatTime(recorderState.elapsedTime))
+                    .font(.system(size: 24, weight: .light, design: .monospaced))
+                    .foregroundColor(.white)
+
+                Spacer()
+
+                // Clear button
+                Button(action: {
+                    recorderState.clearRecording()
+                }) {
+                    Text("Clear")
+                        .font(.system(size: 13))
+                        .foregroundColor(.white.opacity(0.7))
+                }
+                .buttonStyle(.plain)
+                .disabled(recorderState.state == .idle || recorderState.state == .recording)
+                .opacity(recorderState.state == .idle || recorderState.state == .recording ? 0.3 : 1.0)
 
                 // Save button
                 Button(action: {
                     presentSavePanel()
                 }) {
-                    HStack(spacing: 3) {
-                        Text("Save as...")
-                            .font(.system(size: 13))
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 9))
-                    }
-                    .foregroundColor(.white.opacity(0.7))
+                    Text("Save as...")
+                        .font(.system(size: 13))
+                        .foregroundColor(.white.opacity(0.7))
                 }
                 .buttonStyle(.plain)
                 .disabled(recorderState.state != .recorded)
                 .opacity(recorderState.state != .recorded ? 0.3 : 1.0)
             }
-            .padding(.bottom, 16)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(white: 0.1))
