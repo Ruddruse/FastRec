@@ -27,25 +27,17 @@ struct RecordButton: View {
     private var innerContent: some View {
         switch state {
         case .idle:
-            // Circle for record
             Circle()
                 .fill(Color.red)
                 .frame(width: innerSize, height: innerSize)
-        case .recording:
-            // Rounded square for stop
+        case .recording, .playing:
             RoundedRectangle(cornerRadius: 4)
                 .fill(Color.red)
                 .frame(width: 20, height: 20)
         case .recorded:
-            // Triangle for play
             PlayTriangle()
                 .fill(Color.red)
                 .frame(width: 24, height: 24)
-        case .playing:
-            // Square for stop
-            RoundedRectangle(cornerRadius: 4)
-                .fill(Color.red)
-                .frame(width: 20, height: 20)
         }
     }
 }
