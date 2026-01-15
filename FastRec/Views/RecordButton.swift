@@ -4,8 +4,8 @@ struct RecordButton: View {
     let state: RecordingState
     let action: () -> Void
 
-    private let buttonSize: CGFloat = 56
-    private let innerSize: CGFloat = 44
+    private let buttonSize: CGFloat = 70
+    private let innerSize: CGFloat = 55
 
     var body: some View {
         Button(action: action) {
