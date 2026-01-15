@@ -4,15 +4,15 @@ struct RecordButton: View {
     let state: RecordingState
     let action: () -> Void
 
-    private let buttonSize: CGFloat = 70
-    private let innerSize: CGFloat = 55
+    private let buttonSize: CGFloat = 28
+    private let innerSize: CGFloat = 22
 
     var body: some View {
         Button(action: action) {
             ZStack {
                 // Outer ring
                 Circle()
-                    .stroke(Color.red, lineWidth: 3)
+                    .stroke(Color.red, lineWidth: 1.5)
                     .frame(width: buttonSize, height: buttonSize)
 
                 // Inner shape (changes based on state)
@@ -33,19 +33,19 @@ struct RecordButton: View {
                 .frame(width: innerSize, height: innerSize)
         case .recording:
             // Rounded square for stop
-            RoundedRectangle(cornerRadius: 4)
+            RoundedRectangle(cornerRadius: 2)
                 .fill(Color.red)
-                .frame(width: 20, height: 20)
+                .frame(width: 8, height: 8)
         case .recorded:
             // Triangle for play
             PlayTriangle()
                 .fill(Color.red)
-                .frame(width: 24, height: 24)
+                .frame(width: 10, height: 10)
         case .playing:
             // Square for stop
-            RoundedRectangle(cornerRadius: 4)
+            RoundedRectangle(cornerRadius: 2)
                 .fill(Color.red)
-                .frame(width: 20, height: 20)
+                .frame(width: 8, height: 8)
         }
     }
 }

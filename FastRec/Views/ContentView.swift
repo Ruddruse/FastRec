@@ -6,7 +6,7 @@ struct ContentView: View {
     @State private var showingSavePanel = false
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 10) {
             // Row 1: Waveform + Record button
             HStack(spacing: 12) {
                 // Waveform view (dots)
@@ -14,7 +14,7 @@ struct ContentView: View {
                     samples: recorderState.waveformSamples,
                     state: recorderState.state
                 )
-                .frame(height: 30)
+                .frame(height: 24)
 
                 // Record/Stop/Play button
                 RecordButton(state: recorderState.state) {
@@ -23,14 +23,13 @@ struct ContentView: View {
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
+            .padding(.top, 10)
 
             // Row 2: Timer + Controls
-            HStack {
+            HStack(spacing: 12) {
                 // Timer display (left aligned)
                 Text(formatTime(recorderState.elapsedTime))
-                    .font(.system(size: 24, weight: .light, design: .monospaced))
+                    .font(.system(size: 20, weight: .light, design: .monospaced))
                     .foregroundColor(.white)
 
                 Spacer()
@@ -40,8 +39,14 @@ struct ContentView: View {
                     recorderState.clearRecording()
                 }) {
                     Text("Clear")
-                        .font(.system(size: 13))
-                        .foregroundColor(.white.opacity(0.7))
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.8))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(Color.white.opacity(0.08))
+                        )
                 }
                 .buttonStyle(.plain)
                 .disabled(recorderState.state == .idle || recorderState.state == .recording)
@@ -52,16 +57,22 @@ struct ContentView: View {
                     presentSavePanel()
                 }) {
                     Text("Save as...")
-                        .font(.system(size: 13))
-                        .foregroundColor(.white.opacity(0.7))
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.8))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(Color.white.opacity(0.08))
+                        )
                 }
                 .buttonStyle(.plain)
                 .disabled(recorderState.state != .recorded)
                 .opacity(recorderState.state != .recorded ? 0.3 : 1.0)
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 12)
+            .padding(.bottom, 10)
         }
+        .padding(.horizontal, 14)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(white: 0.1))
     }

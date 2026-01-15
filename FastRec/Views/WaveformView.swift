@@ -5,8 +5,8 @@ struct WaveformView: View {
     let state: RecordingState
 
     private let dotCount = 50
-    private let dotSize: CGFloat = 4
-    private let dotSpacing: CGFloat = 2
+    private let dotSize: CGFloat = 3
+    private let dotSpacing: CGFloat = 1.5
 
     var body: some View {
         GeometryReader { geometry in
@@ -66,8 +66,8 @@ struct WaveformDot: View {
     }
 
     private var dotWidth: CGFloat {
-        // Scale dot size based on amplitude (min 3, max baseSize)
-        let size = max(3, baseSize * animatedAmplitude)
+        // Scale dot size based on amplitude (min 2, max baseSize)
+        let size = max(2, baseSize * animatedAmplitude)
         return size
     }
 }
