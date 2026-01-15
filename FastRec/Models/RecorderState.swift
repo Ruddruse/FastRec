@@ -146,14 +146,7 @@ class RecorderState: ObservableObject {
 
     func clearRecording() {
         stopPlayback()
-        audioPlayer = nil
-        audioRecorder?.clear()
-
-        // Delete temp file
-        if let url = recordedAudioURL {
-            try? FileManager.default.removeItem(at: url)
-        }
-
+        audioRecorder?.clear()  // Handles temp file deletion
         recordedAudioURL = nil
         waveformSamples = []
         elapsedTime = 0
@@ -176,26 +169,33 @@ class RecorderState: ObservableObject {
     private func updateWaveform(with samples: [Float]) {
         // Add new samples and maintain max count
         waveformSamples.append(contentsOf: samples)
-        if waveformSamples.count > maxWaveformSamples {
-            waveformSamples = Array(waveformSamples.suffix(maxWaveformSamples))
+        let overflow = waveformSamples.count - maxWaveformSamples
+        if overflow > 0 {
+            waveformSamples.removeFirst(overflow)
         }
     }
 
     private func startTimer() {
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in
+        stopTimer()  // Ensure no existing timer
+        let newTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            DispatchQueue.main.async {
                 self?.elapsedTime += 1
             }
         }
+        RunLoop.main.add(newTimer, forMode: .common)
+        timer = newTimer
     }
 
     private func startPlaybackTimer() {
-        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            Task { @MainActor in
+        stopTimer()  // Ensure no existing timer
+        let newTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            DispatchQueue.main.async {
                 guard let self = self, let player = self.audioPlayer else { return }
                 self.elapsedTime = player.currentTime
             }
         }
+        RunLoop.main.add(newTimer, forMode: .common)
+        timer = newTimer
     }
 
     private func stopTimer() {
