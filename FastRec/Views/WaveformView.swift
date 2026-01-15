@@ -4,7 +4,7 @@ struct WaveformView: View {
     let samples: [Float]
     let state: RecordingState
 
-    private let dotCount = 50
+    private let dotCount = 35
     private let dotSize: CGFloat = 3
     private let dotSpacing: CGFloat = 1.5
 
@@ -15,12 +15,14 @@ struct WaveformView: View {
                     WaveformDot(
                         amplitude: amplitudeForIndex(index),
                         isActive: state == .recording || state == .playing,
-                        baseSize: dotSize
+                        baseSize: dotSize,
+                        maxHeight: geometry.size.height
                     )
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .clipped()
     }
 
     private func amplitudeForIndex(_ index: Int) -> CGFloat {
@@ -36,8 +38,10 @@ struct WaveformView: View {
         // Map index to samples array
         let sampleIndex = Int(Float(index) / Float(dotCount) * Float(samples.count))
         if sampleIndex < samples.count {
-            // Normalize and clamp the amplitude
-            let amplitude = min(1.0, max(0.3, CGFloat(abs(samples[sampleIndex])) * 2))
+            // Amplify the signal for better visual feedback
+            let rawAmplitude = CGFloat(abs(samples[sampleIndex]))
+            // Boost amplitude by 3x and clamp between 0.2 and 1.0
+            let amplitude = min(1.0, max(0.2, rawAmplitude * 3.0))
             return amplitude
         }
 
@@ -49,25 +53,61 @@ struct WaveformDot: View {
     let amplitude: CGFloat
     let isActive: Bool
     let baseSize: CGFloat
+    let maxHeight: CGFloat
 
     @State private var animatedAmplitude: CGFloat = 0.5
 
     var body: some View {
-        Circle()
-            .fill(Color.red)
-            .frame(width: dotWidth, height: dotWidth)
-            .animation(.easeInOut(duration: 0.1), value: animatedAmplitude)
-            .onAppear {
-                animatedAmplitude = amplitude
+        Group {
+            if isActive {
+                // When recording/playing, show as dynamic bars
+                Capsule()
+                    .fill(barColor)
+                    .frame(width: barWidth, height: barHeight)
+                    .shadow(color: Color.red.opacity(0.6), radius: 2, x: 0, y: 0)
+            } else {
+                // When idle, show as circle
+                Circle()
+                    .fill(Color.red.opacity(0.6))
+                    .frame(width: dotWidth, height: dotWidth)
             }
-            .onChange(of: amplitude) { _, newValue in
-                animatedAmplitude = newValue
-            }
+        }
+        .fixedSize()
+        .animation(.spring(response: 0.15, dampingFraction: 0.7), value: animatedAmplitude)
+        .onAppear {
+            animatedAmplitude = amplitude
+        }
+        .onChange(of: amplitude) { _, newValue in
+            animatedAmplitude = newValue
+        }
+    }
+    
+    private var barColor: Color {
+        // Brighter color with intensity based on amplitude
+        let brightness = 0.7 + (0.3 * animatedAmplitude)
+        return Color.red.opacity(brightness)
+    }
+    
+    private var barWidth: CGFloat {
+        // Fixed width - won't change
+        return 3.5
+    }
+    
+    private var barHeight: CGFloat {
+        // Constrain height to container
+        // Use power curve to amplify differences
+        let amplifiedAmplitude = pow(animatedAmplitude, 0.75)
+        
+        let minHeight: CGFloat = 6
+        let constrainedMaxHeight = min(maxHeight * 0.9, 26) // Stay within 90% of container
+        
+        let height = minHeight + (constrainedMaxHeight - minHeight) * amplifiedAmplitude
+        return height
     }
 
     private var dotWidth: CGFloat {
-        // Scale dot size based on amplitude (min 2, max baseSize)
-        let size = max(2, baseSize * animatedAmplitude)
+        // Larger dots when idle
+        let size = max(3, baseSize * animatedAmplitude * 1.2)
         return size
     }
 }

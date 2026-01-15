@@ -3,82 +3,90 @@ import AppKit
 
 struct ContentView: View {
     @ObservedObject var recorderState: RecorderState
-    @State private var showingSavePanel = false
-
+    
+    // MARK: - Layout Constants
+    private let rowHeight: CGFloat = 28
+    private let spacing: CGFloat = 12
+    private let cornerRadius: CGFloat = 6
+    
     var body: some View {
-        VStack(spacing: 12) {
-            // Row 1: Waveform + Record button
-            HStack(spacing: 12) {
-                // Waveform view (dots)
-                WaveformView(
-                    samples: recorderState.waveformSamples,
-                    state: recorderState.state
-                )
-                .frame(height: 28)
-
-                // Record/Stop/Play button
-                RecordButton(state: recorderState.state) {
-                    Task {
-                        await handleMainButtonTap()
-                    }
-                }
-            }
-            .frame(height: 28)
-
-            // Row 2: Timer + Controls
-            HStack(spacing: 12) {
-                // Timer display
-                Text(formatTime(recorderState.elapsedTime))
-                    .font(.system(size: 22, weight: .light, design: .monospaced))
-                    .foregroundColor(.white)
-                    .frame(minWidth: 60, alignment: .leading)
-
-                Spacer()
-
-                // Clear button
-                Button(action: {
-                    recorderState.clearRecording()
-                }) {
-                    Text("Clear")
-                        .font(.system(size: 11))
-                        .foregroundColor(.white.opacity(0.8))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 5)
-                                .fill(Color.white.opacity(0.08))
-                        )
-                }
-                .buttonStyle(.plain)
-                .disabled(recorderState.state == .idle || recorderState.state == .recording)
-                .opacity(recorderState.state == .idle || recorderState.state == .recording ? 0.3 : 1.0)
-
-                // Save button
-                Button(action: {
-                    presentSavePanel()
-                }) {
-                    Text("Save")
-                        .font(.system(size: 11))
-                        .foregroundColor(.white.opacity(0.8))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 5)
-                                .fill(Color.white.opacity(0.08))
-                        )
-                }
-                .buttonStyle(.plain)
-                .disabled(recorderState.state != .recorded)
-                .opacity(recorderState.state != .recorded ? 0.3 : 1.0)
-            }
-            .frame(height: 28)
+        VStack(spacing: spacing) {
+            waveformRow
+            controlsRow
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 16)
+        .padding(16)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(white: 0.1))
+        .background(Color(nsColor: .windowBackgroundColor).opacity(0.95))
+    }
+    
+    // MARK: - View Components
+    
+    private var waveformRow: some View {
+        HStack(spacing: spacing) {
+            WaveformView(
+                samples: recorderState.waveformSamples,
+                state: recorderState.state
+            )
+            .frame(maxWidth: 150)
+            
+            RecordButton(state: recorderState.state) {
+                Task {
+                    await handleMainButtonTap()
+                }
+            }
+        }
+        .frame(height: rowHeight)
+    }
+    
+    private var controlsRow: some View {
+        HStack(spacing: spacing) {
+            Spacer()
+            timerDisplay
+            Spacer()
+            clearButton
+            saveButton
+        }
+        .frame(height: rowHeight)
+    }
+    
+    private var timerDisplay: some View {
+        Text(formatTime(recorderState.elapsedTime))
+            .font(.system(size: 17, weight: .regular, design: .monospaced))
+            .foregroundStyle(.primary)
+            .frame(minWidth: 60, alignment: .leading)
+    }
+    
+    private var clearButton: some View {
+        ControlButton(
+            title: "Clear",
+            isEnabled: canClear
+        ) {
+            recorderState.clearRecording()
+        }
+    }
+    
+    private var saveButton: some View {
+        ControlButton(
+            title: "Save",
+            isEnabled: canSave,
+            isProminent: true
+        ) {
+            presentSavePanel()
+        }
+    }
+    
+    // MARK: - State Helpers
+    
+    private var canClear: Bool {
+        recorderState.state == .recorded || recorderState.state == .playing
+    }
+    
+    private var canSave: Bool {
+        recorderState.state == .recorded
     }
 
+    // MARK: - Actions
+    
     private func handleMainButtonTap() async {
         switch recorderState.state {
         case .idle:
@@ -91,30 +99,37 @@ struct ContentView: View {
             recorderState.stopPlayback()
         }
     }
-
+    
+    // MARK: - Formatting
+    
     private func formatTime(_ time: TimeInterval) -> String {
         let minutes = Int(time) / 60
         let seconds = Int(time) % 60
         return String(format: "%02d:%02d", minutes, seconds)
     }
-
+    
+    // MARK: - Save Panel
+    
     private func presentSavePanel() {
-        // Create format popup
-        let formatPopup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 200, height: 24), pullsDown: false)
-        for format in AudioFormat.allCases {
-            formatPopup.addItem(withTitle: format.rawValue)
+        let panel = configureSavePanel()
+        
+        DispatchQueue.main.async {
+            NSApp.activate(ignoringOtherApps: true)
+            let response = panel.runModal()
+            
+            if response == .OK, let url = panel.url {
+                handleSavePanelResponse(url: url, panel: panel)
+            }
+            
+            // Clean up
+            objc_setAssociatedObject(panel, "formatChangeHandler", nil, .OBJC_ASSOCIATION_RETAIN)
         }
-        formatPopup.selectItem(at: 0)  // Default to WAV
-
-        // Create accessory view with label and popup
-        let accessoryView = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 32))
-        let label = NSTextField(labelWithString: "Format:")
-        label.frame = NSRect(x: 0, y: 6, width: 50, height: 20)
-        formatPopup.frame = NSRect(x: 55, y: 2, width: 150, height: 26)
-        accessoryView.addSubview(label)
-        accessoryView.addSubview(formatPopup)
-
-        // Configure save panel
+    }
+    
+    private func configureSavePanel() -> NSSavePanel {
+        let formatPopup = createFormatPopup()
+        let accessoryView = createAccessoryView(with: formatPopup)
+        
         let panel = NSSavePanel()
         panel.accessoryView = accessoryView
         panel.canCreateDirectories = true
@@ -122,45 +137,121 @@ struct ContentView: View {
         panel.allowedContentTypes = [.wav]
         panel.level = .floating
         panel.isExtensionHidden = false
-
-        // Create handler for this specific panel and retain it
+        
+        // Set up handler
         let handler = FormatChangeHandler(panel: panel)
         formatPopup.target = handler
         formatPopup.action = #selector(FormatChangeHandler.formatChanged(_:))
-        
-        // Retain handler using objc_setAssociatedObject to keep it alive
         objc_setAssociatedObject(panel, "formatChangeHandler", handler, .OBJC_ASSOCIATION_RETAIN)
-
-        // Run modal on main thread for reliable input handling
-        DispatchQueue.main.async {
-            NSApp.activate(ignoringOtherApps: true)
-            let response = panel.runModal()
-
-            if response == .OK, let url = panel.url {
-                let selectedIndex = formatPopup.indexOfSelectedItem
-                let format = AudioFormat.allCases[selectedIndex]
-
-                // Ensure correct extension
-                var finalURL = url
-                if url.pathExtension.lowercased() != format.fileExtension {
-                    finalURL = url.deletingPathExtension().appendingPathExtension(format.fileExtension)
-                }
-
-                Task {
-                    let success = await recorderState.saveRecording(to: finalURL, format: format)
-                    if !success {
-                        print("Failed to save recording")
-                    }
-                }
+        
+        return panel
+    }
+    
+    private func createFormatPopup() -> NSPopUpButton {
+        let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 200, height: 24), pullsDown: false)
+        for format in AudioFormat.allCases {
+            popup.addItem(withTitle: format.rawValue)
+        }
+        popup.selectItem(at: 0)
+        return popup
+    }
+    
+    private func createAccessoryView(with formatPopup: NSPopUpButton) -> NSView {
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 32))
+        let label = NSTextField(labelWithString: "Format:")
+        label.frame = NSRect(x: 0, y: 6, width: 50, height: 20)
+        formatPopup.frame = NSRect(x: 55, y: 2, width: 150, height: 26)
+        view.addSubview(label)
+        view.addSubview(formatPopup)
+        return view
+    }
+    
+    private func handleSavePanelResponse(url: URL, panel: NSSavePanel) {
+        guard let formatPopup = panel.accessoryView?.subviews
+            .compactMap({ $0 as? NSPopUpButton }).first else { return }
+        
+        let selectedIndex = formatPopup.indexOfSelectedItem
+        let format = AudioFormat.allCases[selectedIndex]
+        
+        // Ensure correct extension
+        var finalURL = url
+        if url.pathExtension.lowercased() != format.fileExtension {
+            finalURL = url.deletingPathExtension().appendingPathExtension(format.fileExtension)
+        }
+        
+        Task {
+            let success = await recorderState.saveRecording(to: finalURL, format: format)
+            if !success {
+                print("Failed to save recording")
             }
-            
-            // Clean up retained object
-            objc_setAssociatedObject(panel, "formatChangeHandler", nil, .OBJC_ASSOCIATION_RETAIN)
         }
     }
 }
 
-// Helper class to handle format popup changes
+// MARK: - Control Button Component
+
+private struct ControlButton: View {
+    let title: String
+    let isEnabled: Bool
+    var isProminent: Bool = false
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(textColor)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(buttonBackground)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 5)
+                        .strokeBorder(borderColor, lineWidth: 0.5)
+                )
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1.0 : 0.5)
+        .fixedSize()
+    }
+    
+    private var textColor: Color {
+        if !isEnabled {
+            return Color.white.opacity(0.4)
+        }
+        
+        if isProminent {
+            return .white
+        } else {
+            return .white.opacity(0.9)
+        }
+    }
+    
+    private var buttonBackground: Color {
+        if !isEnabled {
+            return Color.white.opacity(0.08)
+        }
+        
+        if isProminent {
+            return Color.blue.opacity(0.8)
+        } else {
+            return Color.white.opacity(0.15)
+        }
+    }
+    
+    private var borderColor: Color {
+        if isProminent && isEnabled {
+            return Color.white.opacity(0.2)
+        } else {
+            return Color.clear
+        }
+    }
+}
+
+// MARK: - Format Change Handler
 class FormatChangeHandler: NSObject {
     weak var panel: NSSavePanel?
     

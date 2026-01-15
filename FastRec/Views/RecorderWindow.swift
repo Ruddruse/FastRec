@@ -4,7 +4,7 @@ import SwiftUI
 class RecorderWindow: NSPanel {
     init(recorderState: RecorderState) {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 280, height: 110),
+            contentRect: NSRect(x: 0, y: 0, width: 240, height: 110),
             styleMask: [.titled, .closable, .fullSizeContentView, .nonactivatingPanel],
             backing: .buffered,
             defer: false

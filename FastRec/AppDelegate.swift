@@ -43,16 +43,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         if isRecording {
             // Filled red circle when recording
-            let image = NSImage(systemSymbolName: "record.circle.fill", accessibilityDescription: "Recording")
-            // Apply red tint for recording state
-            let config = NSImage.SymbolConfiguration(paletteColors: [.systemRed])
-            button.image = image?.withSymbolConfiguration(config)
+            if let image = NSImage(systemSymbolName: "record.circle.fill", accessibilityDescription: "Recording") {
+                // Set size explicitly for better visibility
+                image.size = NSSize(width: 18, height: 18)
+                
+                // Apply red tint for recording state
+                let config = NSImage.SymbolConfiguration(paletteColors: [.systemRed])
+                    .applying(.init(pointSize: 18, weight: .regular))
+                
+                button.image = image.withSymbolConfiguration(config)
+                button.image?.isTemplate = false  // Don't use template mode for colored icon
+            }
         } else {
             // Normal template icon when not recording
-            let image = NSImage(systemSymbolName: "record.circle", accessibilityDescription: "FastRec")
-            image?.isTemplate = true
-            button.image = image
+            if let image = NSImage(systemSymbolName: "record.circle", accessibilityDescription: "FastRec") {
+                // Set size explicitly for better visibility
+                image.size = NSSize(width: 18, height: 18)
+                image.isTemplate = true
+                
+                // Apply configuration for consistent sizing
+                let config = NSImage.SymbolConfiguration(pointSize: 18, weight: .regular)
+                button.image = image.withSymbolConfiguration(config)
+            }
         }
+        
+        // Ensure button is properly sized
+        button.frame = NSRect(x: 0, y: 0, width: 24, height: 22)
     }
 
     @objc private func statusItemClicked() {
