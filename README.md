@@ -27,17 +27,6 @@ FastRec sits quietly in your menu bar and lets you quickly record any audio play
 
 Download the latest `FastRec-1.0.dmg` from the repository and drag FastRec to your Applications folder.
 
-### Build from Source
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/Ruddruse/FastRec.git
-   ```
-
-2. Open `FastRec.xcodeproj` in Xcode
-
-3. Build and run (⌘R)
-
 ## Usage
 
 1. **Launch** - FastRec appears as an icon in your menu bar
